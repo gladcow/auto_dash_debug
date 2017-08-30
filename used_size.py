@@ -30,6 +30,13 @@ def is_special_type(type_obj):
     return True
 
 
+def get_instance_size(obj_str, obj_type):
+    obj = get_special_type_obj(obj_str, obj_type)
+    if not obj:
+        return obj_type.sizeof
+    return obj.get_used_size()
+
+
 class VectorObj:
 
     def __init__ (self, obj_name, obj_type):
@@ -40,6 +47,8 @@ class VectorObj:
     def is_vector(cls, obj_type):
         type_name = str(obj_type)
         if type_name.find("std::vector<") == 0:
+            return True
+        if type_name.find("std::__cxx11::vector<") == 0:
             return True
         return False
 
@@ -56,13 +65,13 @@ class VectorObj:
 
     def get_used_size(self):
         if is_special_type(self.element_type()):
-            size = 0
+            size = self.obj_type.sizeof
             for i in range(self.size()):
                 elem_str = "(" + self.obj_name + "._M_impl._M_start + " + str(i) + ")"
                 obj = get_special_type_obj(elem_str, self.element_type())
                 size += obj.get_used_size()
             return size
-        return self.size() * self.element_type().sizeof
+        return self.obj_type.sizeof + self.size() * self.element_type().sizeof
 
 
 class ListObj:
@@ -117,6 +126,8 @@ class PairObj:
         type_name = str(obj_type)
         if type_name.find("std::pair<") == 0:
             return True
+        if type_name.find("std::__cxx11::pair<") == 0:
+            return True
         return False
 
     @classmethod
@@ -163,6 +174,8 @@ class MapObj:
         type_name = str(obj_type)
         if type_name.find("std::map<") == 0:
             return True
+        if type_name.find("std::__cxx11::map<") == 0:
+            return True
         return False
 
     @classmethod
@@ -180,11 +193,10 @@ class MapObj:
 
     def get_used_size(self):
         if not is_special_type(self.key_type()) and not is_special_type(self.value_type()):
-            return self.size() * (self.key_type().sizeof + self.value_type().sizeof)
+            return self.obj_type.sizeof + self.size() * (self.key_type().sizeof + self.value_type().sizeof)
         if self.size() == 0:
             return self.obj_type.sizeof
-        size = 0
-        # gdb.execute("p " + self.obj_name)
+        size = self.obj_type.sizeof
         gdb.execute("set $node = " + self.obj_name + "->_M_t->_M_impl->_M_header->_M_left")
         for i in range(self.size()):
             gdb.execute("set $value = (void*)($node + 1)")
@@ -228,11 +240,26 @@ class CMasternodeObj:
         return str(obj_type) == "CMasternode"
 
     def get_used_size(self):
-        return gdb.lookup_type("masternode_info_t").sizeof \
-            + gdb.lookup_type("CMasternodePing").sizeof \
+        return get_instance_size(self.obj_name, gdb.lookup_type("masternode_info_t")) \
+            + get_instance_size(self.obj_name + ".lastPing", gdb.lookup_type("CMasternodePing")) \
             + VectorObj.from_name(self.obj_name + ".vchSig").get_used_size() \
             + 4 * SIZE_OF_INT + 2 * SIZE_OF_BOOL \
             + MapObj.from_name(self.obj_name + ".mapGovernanceObjectsVotedOn").get_used_size()
+
+
+class CMasternodeBroadcastObj:
+
+    def __init__ (self, obj_name, obj_type):
+        self.obj_name = obj_name
+        self.obj_type = obj_type
+
+    @classmethod
+    def is_CMasternodeBroadcast(cls, obj_type):
+        return str(obj_type) == "CMasternodeBroadcast"
+
+    def get_used_size(self):
+        return get_instance_size(self.obj_name, gdb.lookup_type("CMasternode")) \
+            + SIZE_OF_BOOL
 
 
 class UsedSizeCommand (gdb.Command):
@@ -251,11 +278,7 @@ class UsedSizeCommand (gdb.Command):
         args = gdb.string_to_argv(arg)
         obj_type = self.get_type(args[1])
         print (args[1] + " is " + str(obj_type))
-        obj = get_special_type_obj(args[1], obj_type)
-        if not obj:
-            size = obj_type.sizeof
-        else:
-            size = obj.get_used_size()
+        size = get_instance_size(args[1], obj_type)
         self.assign_value(args[0], size)
         size_obj = gdb.parse_and_eval(args[0])
         print (size_obj)
