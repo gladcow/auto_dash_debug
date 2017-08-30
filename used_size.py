@@ -13,6 +13,8 @@ SIZE_OF_BOOL = 1
 def get_special_type_obj(obj_str, obj_type):
     if VectorObj.is_vector(obj_type):
         return VectorObj(obj_str, obj_type)
+    if ListObj.is_list(obj_type):
+        return ListObj(obj_str, obj_type)
     if PairObj.is_pair(obj_type):
         return PairObj(obj_str, obj_type)
     if MapObj.is_map(obj_type):
@@ -61,6 +63,47 @@ class VectorObj:
                 size += obj.get_used_size()
             return size
         return self.size() * self.element_type().sizeof
+
+
+class ListObj:
+
+    def __init__ (self, obj_name, obj_type):
+        self.obj_name = obj_name
+        self.obj_type = obj_type
+
+    @classmethod
+    def is_list(cls, obj_type):
+        type_name = str(obj_type)
+        if type_name.find("std::list<") == 0:
+            return True
+        if type_name.find("std::__cxx11::list<") == 0:
+            return True
+        return False
+
+    @classmethod
+    def from_name(cls, obj_name):
+        return ListObj(obj_name, gdb.parse_and_eval(obj_name).type)
+
+    def element_type(self):
+        return self.obj_type.template_argument(0)
+
+    def size(self):
+        return int(gdb.parse_and_eval(self.obj_name + "._M_impl._M_finish - " +
+                                      self.obj_name + "._M_impl._M_start"))
+
+    def get_used_size(self):
+        gdb.execute("set $head = &" + self.obj_name + "._M_impl._M_node")
+        head = gdb.parse_and_eval("$head")
+        gdb.execute("set $current = " + self.obj_name + "._M_impl._M_node->_M_next")
+        size = self.obj_type.sizeof
+        while gdb.parse_and_eval("$current") != head:
+            if is_special_type(self.element_type()):
+                elem_str = "*(" + str(self.obj_type) + "*)($current + 1)"
+                obj = get_special_type_obj(elem_str, self.element_type())
+                size += obj.get_used_size()
+            else:
+                size += self.element_type().sizeof
+        return size
 
 
 class PairObj:
