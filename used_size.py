@@ -11,16 +11,20 @@ SIZE_OF_BOOL = 1
 
 
 def get_special_type_obj(obj_str, obj_type):
-    if VectorObj.is_vector(obj_type):
+    if VectorObj.is_this_type(obj_type):
         return VectorObj(obj_str, obj_type)
-    if ListObj.is_list(obj_type):
+    if ListObj.is_this_type(obj_type):
         return ListObj(obj_str, obj_type)
-    if PairObj.is_pair(obj_type):
+    if PairObj.is_this_type(obj_type):
         return PairObj(obj_str, obj_type)
-    if MapObj.is_map(obj_type):
+    if MapObj.is_this_type(obj_type):
         return MapObj(obj_str, obj_type)
-    if CMasternodeObj.is_CMasternode(obj_type):
+    if CMasternodeObj.is_this_type(obj_type):
         return CMasternodeObj(obj_str, obj_type)
+    if CMasternodeVerificationObj.is_this_type(obj_type):
+        return CMasternodeVerificationObj(obj_str, obj_type)
+    if CMasternodeBroadcastObj.is_this_type(obj_type):
+        return CMasternodeBroadcastObj(obj_str, obj_type)
     return False
 
 
@@ -44,7 +48,7 @@ class VectorObj:
         self.obj_type = obj_type
 
     @classmethod
-    def is_vector(cls, obj_type):
+    def is_this_type(cls, obj_type):
         type_name = str(obj_type)
         if type_name.find("std::vector<") == 0:
             return True
@@ -81,7 +85,7 @@ class ListObj:
         self.obj_type = obj_type
 
     @classmethod
-    def is_list(cls, obj_type):
+    def is_this_type(cls, obj_type):
         type_name = str(obj_type)
         if type_name.find("std::list<") == 0:
             return True
@@ -122,7 +126,7 @@ class PairObj:
         self.obj_type = obj_type
 
     @classmethod
-    def is_pair(cls, obj_type):
+    def is_this_type(cls, obj_type):
         type_name = str(obj_type)
         if type_name.find("std::pair<") == 0:
             return True
@@ -141,6 +145,7 @@ class PairObj:
         return self.obj_type.template_argument(1)
 
     def get_used_size(self):
+        gdb.execute("p " + self.obj_name)
         if not is_special_type(self.key_type()) and not is_special_type(self.value_type()):
             return self.key_type().sizeof + self.value_type().sizeof
 
@@ -170,7 +175,7 @@ class MapObj:
         self.obj_type = obj_type
 
     @classmethod
-    def is_map(cls, obj_type):
+    def is_this_type(cls, obj_type):
         type_name = str(obj_type)
         if type_name.find("std::map<") == 0:
             return True
@@ -189,7 +194,9 @@ class MapObj:
         return self.obj_type.template_argument(1)
 
     def size(self):
-        return int(gdb.parse_and_eval(self.obj_name + "._M_t->_M_impl->_M_node_count"))
+        res = int(gdb.parse_and_eval(self.obj_name + "._M_t->_M_impl->_M_node_count"))
+        print ("map size is " + str(res))
+        return res
 
     def get_used_size(self):
         if not is_special_type(self.key_type()) and not is_special_type(self.value_type()):
@@ -202,6 +209,7 @@ class MapObj:
             gdb.execute("set $value = (void*)($node + 1)")
             if is_special_type(self.key_type()):
                 key_elem_str = "*(" + str(self.key_type()) + "*)$value"
+                print(key_elem_str)
                 obj = get_special_type_obj(key_elem_str, self.key_type())
                 size += obj.get_used_size()
             else:
@@ -209,7 +217,9 @@ class MapObj:
 
             gdb.execute("set $value = $value + 4")
             if is_special_type(self.value_type()):
+                gdb.execute("p $value")
                 value_elem_str = "*(" + str(self.value_type()) + "*)$value"
+                print(value_elem_str)
                 obj = get_special_type_obj(value_elem_str, self.value_type())
                 size += obj.get_used_size()
             else:
@@ -236,15 +246,35 @@ class CMasternodeObj:
         self.obj_type = obj_type
 
     @classmethod
-    def is_CMasternode(cls, obj_type):
+    def is_this_type(cls, obj_type):
         return str(obj_type) == "CMasternode"
 
     def get_used_size(self):
+        gdb.execute("p " + self.obj_name)
         return get_instance_size(self.obj_name, gdb.lookup_type("masternode_info_t")) \
             + get_instance_size(self.obj_name + ".lastPing", gdb.lookup_type("CMasternodePing")) \
             + VectorObj.from_name(self.obj_name + ".vchSig").get_used_size() \
             + 4 * SIZE_OF_INT + 2 * SIZE_OF_BOOL \
             + MapObj.from_name(self.obj_name + ".mapGovernanceObjectsVotedOn").get_used_size()
+
+
+class CMasternodeVerificationObj:
+
+    def __init__ (self, obj_name, obj_type):
+        self.obj_name = obj_name
+        self.obj_type = obj_type
+
+    @classmethod
+    def is_this_type(cls, obj_type):
+        return str(obj_type) == "CMasternodeVerification"
+
+    def get_used_size(self):
+        return get_instance_size(self.obj_name + ".vin1", gdb.lookup_type("CTxIn")) \
+            + get_instance_size(self.obj_name + ".vin2", gdb.lookup_type("CTxIn")) \
+            + get_instance_size(self.obj_name + ".addr", gdb.lookup_type("CService")) \
+            + 2 * SIZE_OF_INT \
+            + VectorObj.from_name(self.obj_name + ".vchSig1").get_used_size() \
+            + VectorObj.from_name(self.obj_name + ".vchSig2").get_used_size()
 
 
 class CMasternodeBroadcastObj:
@@ -254,10 +284,11 @@ class CMasternodeBroadcastObj:
         self.obj_type = obj_type
 
     @classmethod
-    def is_CMasternodeBroadcast(cls, obj_type):
+    def is_this_type(cls, obj_type):
         return str(obj_type) == "CMasternodeBroadcast"
 
     def get_used_size(self):
+        gdb.execute("p " + self.obj_name)
         return get_instance_size(self.obj_name, gdb.lookup_type("CMasternode")) \
             + SIZE_OF_BOOL
 
