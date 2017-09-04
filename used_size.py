@@ -27,6 +27,12 @@ def get_special_type_obj(obj_str, obj_type):
         return CMasternodeVerificationObj(obj_str, obj_type)
     if CMasternodeBroadcastObj.is_this_type(obj_type):
         return CMasternodeBroadcastObj(obj_str, obj_type)
+    if CMasternodeIndexObj.is_this_type(obj_type):
+        return CMasternodeIndexObj(obj_str, obj_type)
+    if CMasternodePingObj.is_this_type(obj_type):
+        return CMasternodePingObj(obj_str, obj_type)
+    if CMasternodeManObj.is_this_type(obj_type):
+        return CMasternodeManObj(obj_str, obj_type)
     return False
 
 
@@ -300,7 +306,6 @@ class CMasternodeObj:
         return str(obj_type) == "CMasternode"
 
     def get_used_size(self):
-        gdb.execute("p " + self.obj_name)
         return get_instance_size(self.obj_name, gdb.lookup_type("masternode_info_t")) \
             + get_instance_size(self.obj_name + ".lastPing", gdb.lookup_type("CMasternodePing")) \
             + VectorObj.from_name(self.obj_name + ".vchSig").get_used_size() \
@@ -338,9 +343,76 @@ class CMasternodeBroadcastObj:
         return str(obj_type) == "CMasternodeBroadcast"
 
     def get_used_size(self):
-        gdb.execute("p " + self.obj_name)
         return get_instance_size(self.obj_name, gdb.lookup_type("CMasternode")) \
             + SIZE_OF_BOOL
+
+
+class CMasternodeIndexObj:
+
+    def __init__ (self, obj_name, obj_type):
+        self.obj_name = obj_name
+        self.obj_type = obj_type
+
+    @classmethod
+    def is_this_type(cls, obj_type):
+        return str(obj_type) == "CMasternodeIndex"
+
+    def get_used_size(self):
+        return SIZE_OF_INT \
+            + MapObj.from_name(self.obj_name + ".mapIndex").get_used_size() \
+            + MapObj.from_name(self.obj_name + ".mapReverseIndex").get_used_size()
+
+
+class CMasternodePingObj:
+
+    def __init__ (self, obj_name, obj_type):
+        self.obj_name = obj_name
+        self.obj_type = obj_type
+
+    @classmethod
+    def is_this_type(cls, obj_type):
+        return str(obj_type) == "CMasternodePing"
+
+    def get_used_size(self):
+        return get_instance_size(self.obj_name + ".vin", gdb.lookup_type("CTxIn")) \
+            + get_instance_size(self.obj_name + ".blockHash", gdb.lookup_type("uint256")) \
+            + get_instance_size(self.obj_name + ".sigTime", gdb.lookup_type("int64_t")) \
+            + VectorObj.from_name(self.obj_name + ".vchSig").get_used_size() \
+            + SIZE_OF_BOOL \
+            + get_instance_size(self.obj_name + ".nSentinelVersion", gdb.lookup_type("uint32_t"))
+
+
+class CMasternodeManObj:
+
+    def __init__ (self, obj_name, obj_type):
+        self.obj_name = obj_name
+        self.obj_type = obj_type
+
+    @classmethod
+    def is_this_type(cls, obj_type):
+        return str(obj_type) == "CMasternodeMan"
+
+    def get_used_size(self):
+        return get_instance_size(self.obj_name + ".cs", gdb.lookup_type("CCriticalSection")) \
+             + gdb.parse_and_eval(self.obj_name + ".pCurrentBlockIndex").type.sizeof \
+             + VectorObj.from_name(self.obj_name + ".vMasternodes").get_used_size() \
+             + MapObj.from_name(self.obj_name + ".mAskedUsForMasternodeList").get_used_size() \
+             + MapObj.from_name(self.obj_name + ".mWeAskedForMasternodeList").get_used_size() \
+             + MapObj.from_name(self.obj_name + ".mWeAskedForMasternodeListEntry").get_used_size() \
+             + MapObj.from_name(self.obj_name + ".mWeAskedForVerification").get_used_size() \
+             + MapObj.from_name(self.obj_name + ".mMnbRecoveryRequests").get_used_size() \
+             + MapObj.from_name(self.obj_name + ".mMnbRecoveryGoodReplies").get_used_size() \
+             + ListObj.from_name(self.obj_name + ".listScheduledMnbRequestConnections").get_used_size() \
+             + get_instance_size(self.obj_name + ".nLastIndexRebuildTime", gdb.lookup_type("int64_t")) \
+             + get_instance_size(self.obj_name + ".indexMasternodes", gdb.lookup_type("CMasternodeIndex")) \
+             + get_instance_size(self.obj_name + ".indexMasternodesOld", gdb.lookup_type("CMasternodeIndex")) \
+             + 3 * SIZE_OF_BOOL \
+             # + VectorObj.from_name(self.obj_name + ".vecDirtyGovernanceObjectHashes").get_used_size() \
+             # + get_instance_size(self.obj_name + ".nLastWatchdogVoteTime", gdb.lookup_type("int64_t")) \
+             # + MapObj.from_name(self.obj_name + ".mapSeenMasternodeBroadcast").get_used_size() \
+             # + MapObj.from_name(self.obj_name + ".mapSeenMasternodePing").get_used_size() \
+             # + MapObj.from_name(self.obj_name + ".mapSeenMasternodeVerification").get_used_size() \
+             # + get_instance_size(self.obj_name + ".nDsqCount", gdb.lookup_type("int64_t"))
 
 
 class UsedSizeCommand (gdb.Command):
