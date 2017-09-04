@@ -196,7 +196,6 @@ class MapObj:
 
     def size(self):
         res = int(gdb.parse_and_eval(self.obj_name + "._M_t->_M_impl->_M_node_count"))
-        print ("map size is " + str(res))
         return res
 
     def get_used_size(self):
@@ -205,7 +204,7 @@ class MapObj:
         if self.size() == 0:
             return self.obj_type.sizeof
         size = self.obj_type.sizeof
-        gdb.execute("set $node = " + self.obj_name + "->_M_t->_M_impl->_M_header->_M_left")
+        gdb.execute("set $node = " + self.obj_name + "._M_t._M_impl._M_header._M_left")
         for i in range(self.size()):
             gdb.execute("set $value = (void*)($node + 1)")
             if is_special_type(self.key_type()):
@@ -215,7 +214,7 @@ class MapObj:
             else:
                 size += self.key_type().sizeof
 
-            gdb.execute("set $value = $value + 4")
+            gdb.execute("set $value = $value + " + str(self.key_type().sizeof))
             if is_special_type(self.value_type()):
                 value_elem_str = "*('" + str(self.value_type()) + "'*)$value"
                 obj = get_special_type_obj(value_elem_str, self.value_type())
@@ -261,7 +260,6 @@ class SetObj:
 
     def size(self):
         res = int(gdb.parse_and_eval(self.obj_name + "->_M_t->_M_impl->_M_node_count"))
-        print ("set size is " + str(res))
         return res
 
     def get_used_size(self):
