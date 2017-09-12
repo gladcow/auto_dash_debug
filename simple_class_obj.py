@@ -13,7 +13,17 @@ import common_helpers
 
 simple_types = ["CMasternode", "CMasternodeVerification",
                 "CMasternodeBroadcast", "CMasternodeIndex", "CMasternodePing",
-                "CMasternodeMan", "CDarksendQueue", "CDarkSendEntry"]
+                "CMasternodeMan", "CDarksendQueue", "CDarkSendEntry",
+                "CTransaction", "CMutableTransaction", "CPrivateSendBase",
+                "CPrivateSendClient", "CPrivateSendServer", "CMasternodePayments",
+                "CMasternodePaymentVote", "CMasternodeBlockPayees",
+                "CMasternodePayee", "CInstantSend", "CTxLockRequest",
+                "CTxLockVote", "CTxLockCandidate", "COutPoint", "CTxLockRequest",
+                "COutPointLock", "CSporkManager", "CMasternodeSync",
+                "CGovernanceManager", "CRateCheckBuffer", "CGovernanceObject",
+                "CGovernanceVote", "CGovernanceObjectVoteFile"]
+
+simple_templates = ["CacheMultiMap", "CacheMap"]
 
 
 class SimpleClassObj:
@@ -24,9 +34,16 @@ class SimpleClassObj:
 
     @classmethod
     def is_this_type(cls, obj_type):
-        return str(obj_type) in simple_types
+        str_type = str(obj_type)
+        if str_type in simple_types:
+            return True
+        for templ in simple_templates:
+            if str_type.find(templ + "<") == 0:
+                return True
+        return False
 
     def get_used_size(self):
+        print("process %s of type %s" % (self.obj_name, str(self.obj_type)))
         size = 0
         fields = self.obj_type.fields()
         for f in fields:
@@ -39,4 +56,5 @@ class SimpleClassObj:
                 continue
             # process simple field
             size += common_helpers.get_instance_size("(" + self.obj_name + ")." + f.name, f.type)
+        print("used size is %d" % size)
         return size
