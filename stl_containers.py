@@ -171,7 +171,6 @@ class MapObj:
         rep_type = find_type(self.obj_type, "_Rep_type")
         self.node_type = find_type(rep_type, "_Link_type")
         self.node_type = self.node_type.strip_typedefs()
-        print("Node type: %s" % str(self.node_type))
 
     @classmethod
     def is_this_type(cls, obj_type):

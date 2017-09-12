@@ -43,7 +43,6 @@ class SimpleClassObj:
         return False
 
     def get_used_size(self):
-        print("process %s of type %s" % (self.obj_name, str(self.obj_type)))
         size = 0
         fields = self.obj_type.fields()
         for f in fields:
@@ -52,9 +51,8 @@ class SimpleClassObj:
                 continue
             # process base class size
             if f.is_base_class:
-                size += common_helpers.get_instance_size(self.obj_name, f.type)
+                size += common_helpers.get_instance_size(self.obj_name, f.type.strip_typedefs())
                 continue
             # process simple field
-            size += common_helpers.get_instance_size("(" + self.obj_name + ")." + f.name, f.type)
-        print("used size is %d" % size)
+            size += common_helpers.get_instance_size("(" + self.obj_name + ")." + f.name, f.type.strip_typedefs())
         return size
