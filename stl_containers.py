@@ -71,21 +71,25 @@ class ListObj:
         return self.obj_type.template_argument(0)
 
     def size(self):
-        return int(gdb.parse_and_eval(self.obj_name + "._M_impl._M_finish - " +
+        res = int(gdb.parse_and_eval(self.obj_name + "._M_impl._M_finish - " +
                                       self.obj_name + "._M_impl._M_start"))
+        return res
 
     def get_used_size(self):
         gdb.execute("set $head = &" + self.obj_name + "._M_impl._M_node")
         head = gdb.parse_and_eval("$head")
-        gdb.execute("set $current = " + self.obj_name + "._M_impl._M_node->_M_next")
+        gdb.execute("set $current = " + self.obj_name + "._M_impl._M_node._M_next")
+        is_special = common_helpers.is_special_type(self.element_type())
         size = self.obj_type.sizeof
         while gdb.parse_and_eval("$current") != head:
-            if common_helpers.is_special_type(self.element_type()):
-                elem_str = "*('" + str(self.obj_type) + "'*)($current + 1)"
+            if is_special:
+                elem_str = "*('" + str(self.element_type()) + "'*)($current + 1)"
                 obj = common_helpers.get_special_type_obj(elem_str, self.element_type())
                 size += obj.get_used_size()
             else:
                 size += self.element_type().sizeof
+            gdb.execute("set $current = $current._M_next")
+
         return size
 
 
@@ -202,26 +206,28 @@ class MapObj:
             return self.obj_type.sizeof
         size = self.obj_type.sizeof
         gdb.execute("set $node = " + self.obj_name + "._M_t._M_impl._M_header._M_left")
+        row_node = gdb.parse_and_eval("$node")
         for i in range(self.size()):
-            node = gdb.parse_and_eval("$node")
-            node = node.cast(self.node_type).dereference()
-            pair = get_value_from_Rb_tree_node(node)
+            node_val = row_node.cast(self.node_type).dereference()
+            pair = get_value_from_Rb_tree_node(node_val)
 
             val_type = pair.type
             val_str = "*('%s'*)%s" % (str(val_type), str(pair.address))
             size += common_helpers.get_instance_size(val_str, val_type)
 
-            if gdb.parse_and_eval("$node->_M_right") != 0:
-                gdb.execute("set $node = $node->_M_right")
-                while gdb.parse_and_eval("$node->_M_left") != 0:
-                    gdb.execute("set $node = $node->_M_left")
+            node = row_node
+            if node.dereference()['_M_right']:
+                node = node.dereference()['_M_right']
+                while node.dereference()['_M_left']:
+                    node = node.dereference()['_M_left']
             else:
-                gdb.execute("set $tmp_node = $node->_M_parent")
-                while gdb.parse_and_eval("$node") == gdb.parse_and_eval("$tmp_node->_M_right"):
-                    gdb.execute("set $node = $tmp_node")
-                    gdb.execute("set $tmp_node = $tmp_node->_M_parent")
-                if gdb.parse_and_eval("$node->_M_right") != gdb.parse_and_eval("$tmp_node"):
-                    gdb.execute("set $node = $tmp_node")
+                parent = node.dereference()['_M_parent']
+                while node == parent.dereference()['_M_right']:
+                    node = parent
+                    parent = parent.dereference()['_M_parent']
+                if node.dereference()['_M_right'] != parent:
+                    node = parent
+            row_node = node
         return size
 
 
