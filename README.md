@@ -1,81 +1,46 @@
-memdump.py is a GDB extension written in Python. It dumps all memory operations done by GNU LibC Runtime ( malloc, realloc, calloc and free),
-with their information ( arguments, callstacks and return value) by automating GDB. Memleak.py detects memory leaks analyzing output
-of memdump.py. You can use memleak.sh to detect memory leaks at one go as it calls both memdump.py and memleak.py.
+# Contents
+This directory contains tools to automatically get data about the memory consumption by some objects in dashd process with the help of GDB debugger.
 
-**How it works :** Recent GDBs shipped with an embedded Python interpreter. They also provide a Python API. This GDB extension
-automates GDB engine to collect information about main memory functions from GNU LibC runtime.
+## dash_dbg.sh
+This shell script attaches GDB to running dashd process, executes debug.gdb script and detaches.
+By default it uses testnet setting,  see script comments to attach to mainnet dashd.
 
-Detailed blog article : https://nativecoding.wordpress.com/2016/07/31/gdb-debugging-automation-with-python/
+## debug.gdb
+Contains debugger instructions to execute during attach: load python code and executes it for the objects we want to investigate.
 
-For GDB Python API , see https://sourceware.org/gdb/onlinedocs/gdb/Python-API.html
+## log_size.py
+Contains definition of the gdb command log_size. After loading of this script it can be called from gdb command line or other gdb scripts.
+Command params:
+`log_size arg0 arg1`
+`arg0` - name of object whose memory will be written in log file
+`arg1` - name of the log file
+Example:
+```
+log_size mnodeman "memlog.txt"
+```
 
-For GNU LibC Runtime memory functions , see https://sourceware.org/git/?p=glibc.git;a=blob;f=malloc/malloc.c;h=1f5f166ea2ecdf601546b4157e3a291dd5c330a4;hb=HEAD
+## used_size.py
+Contains definition of the gdb command used_size. After loading of this script it can be called from gdb command line or other gdb scripts.
+Command params:
+`used_size arg0 arg1`
+`arg0` - variable to store memory used by the object
+`arg1` - name of object whose memory will be calculated and stored in the first argument
+Example:
+```
+>(gdb) set $size = 0
+>(gdb) used_size $size mnodeman
+>(gdb) p $size
+```
 
-**How to run :** Provided a bash script which runs GDB in batch mode , therefore you just need :
+## stl_containers.py
+Contains helper classes to calculate memory used by the STL containers (list, vector, map, set, pair)
 
-				chmod +x ./memleak.sh 
-				./memleak.sh ./debugee
-				
-At the end it will output a file called leak_report.txt and another one called memdump.txt.
+## simple_class_obj.py
+Contains helper class to calculate memory used by the object as a sum of the memory used by its fields.
+All processed objects of such type are listed in the this file,  you can add new types you are interested in to this list.
+If some type is not listed here,  his size is calculated as sizeof result (except STL containers which are processed in stl_containers.py).
 
-Note : As prerequisites you will need to install debug version of GNU LibC runtime. On Ubuntu : 
-
-	sudo apt-get install libc6-dbg
-
-And on CentOS :
-
-	yum install yum-utils
-	debuginfo-install glibc
-
-**Watch Asciinema recording :** 
+## common_helpers.py
+Several helper functions that are used in other python code.
 
 
-
-<a href="https://asciinema.org/a/8omw4c7xpqmp7sv6yud4d1kih" target="_blank"><img src="https://asciinema.org/a/1t658f4gnp6gi2fswoft42bmn.png" width="589"/></a>
-										
-**Sample debugee:** A sample and simple multihthreaded debugee is provided under debugee directory including its prebuilt binary. If you want to rebuild it :
-
-				g++  -Wall -g -pthread debugee.cpp -o debugee
-
-**Example memdump.py output :**
-
-				type : malloc , arg1  : 256, address : 0x602010,
-				callstack : 
-					__GI___libc_malloc
-					main
-				type : realloc , arg1 : 0x602010, arg2 : 512, address : 0x602010,
-				callstack : 
-					__GI___libc_realloc
-					main
-				type : calloc , arg1 : 18, arg2 : 16, address : 0x602230,
-				callstack : 
-					__libc_calloc
-					allocate_dtv
-					__GI__dl_allocate_tls
-					allocate_stack
-					__pthread_create_2_1
-					main
-				type : calloc , arg1 : 18, arg2 : 16, address : 0x602360,
-				callstack : 
-					__libc_calloc
-					allocate_dtv
-					__GI__dl_allocate_tls
-					allocate_stack
-					__pthread_create_2_1
-					main
-				type : free , arg1 : 0x0,
-				callstack : 
-					__GI___libc_free
-					__libc_thread_freeres
-					start_thread
-					clone
-				type : free , arg1 : 0x0,
-				callstack : 
-					__GI___libc_free
-					__libc_thread_freeres
-					start_thread
-					clone
-				type : free , arg1 : 0x602010,
-				callstack : 
-					__GI___libc_free
-					main
