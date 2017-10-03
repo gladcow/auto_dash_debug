@@ -11,6 +11,32 @@ sys.path.append(os.getcwd())
 import common_helpers
 
 
+def find_type(orig, name):
+    typ = orig.strip_typedefs()
+    while True:
+        # Strip cv qualifiers
+        search = '%s::%s' % (typ.unqualified(), name)
+        try:
+            return gdb.lookup_type(search)
+        except RuntimeError:
+            pass
+        # type is not found,  try superclass search
+        field = typ.fields()[0]
+        if not field.is_base_class:
+            raise ValueError("Cannot find type %s::%s" % (str(orig), name))
+        typ = field.type
+
+
+def get_value_from_aligned_membuf(buf, valtype):
+    """Returns the value held in a __gnu_cxx::__aligned_membuf."""
+    return buf['_M_storage'].address.cast(valtype.pointer()).dereference()
+
+
+def get_value_from_node(node):
+    valtype = node.type.template_argument(0)
+    return get_value_from_aligned_membuf(node['_M_storage'], valtype)
+
+
 class VectorObj:
 
     def __init__ (self, obj_name, obj_type):
@@ -59,8 +85,8 @@ class ListObj:
         type_name = str(obj_type)
         if type_name.find("std::list<") == 0:
             return True
-        if type_name.find("std::__cxx11::list<") == 0:
-            return True
+#        if type_name.find("std::__cxx11::list<") == 0:
+#            return True
         return False
 
     @classmethod
@@ -70,25 +96,23 @@ class ListObj:
     def element_type(self):
         return self.obj_type.template_argument(0)
 
-    def size(self):
-        res = int(gdb.parse_and_eval(self.obj_name + "._M_impl._M_finish - " +
-                                      self.obj_name + "._M_impl._M_start"))
-        return res
-
     def get_used_size(self):
-        gdb.execute("set $head = &" + self.obj_name + "._M_impl._M_node")
-        head = gdb.parse_and_eval("$head")
-        gdb.execute("set $current = " + self.obj_name + "._M_impl._M_node._M_next")
         is_special = common_helpers.is_special_type(self.element_type())
+        obj = gdb.parse_and_eval(self.obj_name)
+        nodetype = find_type(self.obj_type, '_Node')
+        nodetype = nodetype.strip_typedefs().pointer()
+        head = obj['_M_impl']['_M_node']
+        current = head['_M_next']
         size = self.obj_type.sizeof
-        while gdb.parse_and_eval("$current") != head:
+        while current != head.address:
             if is_special:
-                elem_str = "*('" + str(self.element_type()) + "'*)($current + 1)"
+                elem = current.cast(nodetype).dereference()
+                elem_str = "&(('" + str(self.element_type()) + "'*)" + elem.address + ")"
                 obj = common_helpers.get_special_type_obj(elem_str, self.element_type())
                 size += obj.get_used_size()
             else:
                 size += self.element_type().sizeof
-            gdb.execute("set $current = $current._M_next")
+            current = current['_M_next']
 
         return size
 
@@ -141,32 +165,6 @@ class PairObj:
         return size
 
 
-def find_type(orig, name):
-    typ = orig.strip_typedefs()
-    while True:
-        # Strip cv qualifiers
-        search = '%s::%s' % (typ.unqualified(), name)
-        try:
-            return gdb.lookup_type(search)
-        except RuntimeError:
-            pass
-        # type is not found,  try superclass search
-        field = typ.fields()[0]
-        if not field.is_base_class:
-            raise ValueError("Cannot find type %s::%s" % (str(orig), name))
-        typ = field.type
-
-
-def get_value_from_aligned_membuf(buf, valtype):
-    """Returns the value held in a __gnu_cxx::__aligned_membuf."""
-    return buf['_M_storage'].address.cast(valtype.pointer()).dereference()
-
-
-def get_value_from_Rb_tree_node(node):
-    valtype = node.type.template_argument(0)
-    return get_value_from_aligned_membuf(node['_M_storage'], valtype)
-
-
 class MapObj:
 
     def __init__ (self, obj_name, obj_type):
@@ -209,7 +207,7 @@ class MapObj:
         row_node = gdb.parse_and_eval("$node")
         for i in range(self.size()):
             node_val = row_node.cast(self.node_type).dereference()
-            pair = get_value_from_Rb_tree_node(node_val)
+            pair = get_value_from_node(node_val)
 
             val_type = pair.type
             val_str = "*('%s'*)%s" % (str(val_type), str(pair.address))

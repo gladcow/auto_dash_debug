@@ -36,7 +36,7 @@ class UsedSizeCommand (gdb.Command):
             size_obj = gdb.parse_and_eval(args[0])
             print (size_obj)
 
-        except gdb.error as e:
+        except Exception as e:
             print(traceback.format_exc())
             raise e
 
