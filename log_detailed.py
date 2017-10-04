@@ -22,10 +22,9 @@ class LogDetailedCommand (gdb.Command):
     def invoke(self, arg, from_tty):
         try:
             args = gdb.string_to_argv(arg)
-            obj = args[0]
-            obj_type = gdb.parse_and_eval(obj).type
+            obj = gdb.parse_and_eval(args[0])
             logfile = open(args[1], 'a')
-            size = common_helpers.get_instance_size(obj, obj_type)
+            size = common_helpers.get_instance_size(obj)
             logfile.write("%s %s: %d\n" % (str(datetime.datetime.now()), str(obj), size))
             logfile.close()
         except gdb.error as e:

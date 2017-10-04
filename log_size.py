@@ -11,7 +11,6 @@ import sys
 import os
 sys.path.append(os.getcwd())
 import common_helpers
-import cProfile
 
 
 class LogSizeCommand (gdb.Command):
@@ -23,17 +22,12 @@ class LogSizeCommand (gdb.Command):
     def invoke(self, arg, from_tty):
         try:
             args = gdb.string_to_argv(arg)
-            obj = args[0]
-            obj_type = gdb.parse_and_eval(obj).type
+            obj = gdb.parse_and_eval(args[0])
             logfile = open(args[1], 'a')
-            profile = cProfile.Profile()
-            profile.enable()
-            size = common_helpers.get_instance_size(obj, obj_type)
-            profile.disable()
-            profile.dump_stats('py_profile.txt')
-            logfile.write("%s %s: %d\n" % (str(datetime.datetime.now()), str(obj), size))
+            size = common_helpers.get_instance_size(obj)
+            logfile.write("%s %s: %d\n" % (str(datetime.datetime.now()), args[0], size))
             logfile.close()
-        except gdb.error as e:
+        except Exception as e:
             print(traceback.format_exc())
             raise e
 
